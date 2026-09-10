@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(orbslam3)
 
-# You should set the PYTHONPATH to your own python site-packages path
-set(ENV{PYTHONPATH} "/opt/ros/foxy/lib/python3.8/site-packages/")
+# colcon/ament already sets PYTHONPATH correctly when sourcing the workspace;
+# the upstream hardcoded python3.8 path broke configure on our python3.6 (Bionic) system.
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules)
 
