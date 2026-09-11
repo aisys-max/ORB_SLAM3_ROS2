@@ -60,7 +60,13 @@ add_executable(stereo-inertial
 )
 ament_target_dependencies(stereo-inertial rclcpp sensor_msgs cv_bridge ORB_SLAM3 Pangolin)
 
-install(TARGETS mono rgbd stereo stereo-inertial
+add_executable(mono-inertial
+  src/monocular-inertial/mono-inertial.cpp
+  src/monocular-inertial/monocular-inertial-slam-node.cpp
+)
+ament_target_dependencies(mono-inertial rclcpp sensor_msgs cv_bridge ORB_SLAM3 Pangolin)
+
+install(TARGETS mono rgbd stereo stereo-inertial mono-inertial
   DESTINATION lib/${PROJECT_NAME})
 
 # Install launch files.
