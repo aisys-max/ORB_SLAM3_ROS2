@@ -4,6 +4,7 @@
 #include <queue>
 #include <mutex>
 #include <thread>
+#include <atomic>
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -38,6 +39,7 @@ private:
 
     ORB_SLAM3::System *SLAM_;
     std::thread *syncThread_;
+    std::atomic<bool> stopSync_{false};
 
     std::queue<ImuMsg::SharedPtr> imuBuf_;
     std::mutex bufMutexImu_;

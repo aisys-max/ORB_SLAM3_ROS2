@@ -18,6 +18,9 @@ MonocularInertialNode::MonocularInertialNode(ORB_SLAM3::System *pSLAM) :
 
 MonocularInertialNode::~MonocularInertialNode()
 {
+    // stopSync_ 없이는 SyncWithImu()의 while(1)이 절대 끝나지 않아 join()이 영원히 멈춘다
+    // (bag 재생이 끝나고 SIGINT로 종료할 때 실제로 이 문제로 프로세스가 멈췄다).
+    stopSync_ = true;
     syncThread_->join();
     delete syncThread_;
 
@@ -67,7 +70,7 @@ cv::Mat MonocularInertialNode::GetImage(const ImageMsg::SharedPtr msg)
 
 void MonocularInertialNode::SyncWithImu()
 {
-    while (1)
+    while (!stopSync_)
     {
         cv::Mat im;
         double tIm = 0;

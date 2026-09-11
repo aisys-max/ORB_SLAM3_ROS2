@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 
     rclcpp::init(argc, argv);
 
-    bool visualization = true;
+    bool visualization = false;  // ros2 bag 재생 검증은 헤드리스로 실행 (X11 불필요)
     ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::IMU_MONOCULAR, visualization);
 
     auto node = std::make_shared<MonocularInertialNode>(&SLAM);
