@@ -1,0 +1,81 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters. iPhone Xs Max 후면 광각 카메라, aisys-max/slam-tx2#5에서 체커보드로
+# 직접 캘리브레이션한 값(calibration/iphone_xs_max_back_camera.yaml, RMS 재투영 오차 0.147px).
+# 공개된 iPhone 스펙값이 아니다.
+#--------------------------------------------------------------------------------------------
+Camera.type: "PinHole"
+
+Camera.fx: 492.4419205608369
+Camera.fy: 492.6921580147929
+Camera.cx: 322.3633190832175
+Camera.cy: 236.13945711616662
+
+# ORB_SLAM3의 PinHole 모델은 k1/k2/p1/p2만 쓴다(k3 없음) - calibration/iphone_xs_max_back_camera.yaml의
+# D는 5개 값(k1,k2,p1,p2,k3)이라 k3(1.6526...)는 버린다. 재투영 오차가 이미 0.15px 이하로 낮아서
+# k1/k2/p1/p2만으로도 실사용엔 충분하다고 보지만, 화면 가장자리 왜곡 보정은 k3 없이는 약간 덜 정확하다.
+Camera.k1: 0.26858373474026187
+Camera.k2: -1.0722916777746105
+Camera.p1: 0.006587645652067779
+Camera.p2: 0.0014160696907278868
+
+Camera.width: 640
+Camera.height: 480
+
+# 실측 목표는 20~30fps(docs/ros2-topic-contract.md)이지만, USB/iproxy 대역폭 한계로 실측
+# ~5.9Hz까지 떨어지는 게 확인됐다(aisys-max/slam-tx2#10). 이 값은 ORB-SLAM3 내부 타이밍
+# 휴리스틱(속도 추정 윈도우 등)에 쓰이므로 목표치보다 실측치에 가깝게 낮춰 잡는다 - 라이브
+# 테스트에서 트래킹이 잘 안 되면 이 값을 실제 관찰된 Hz로 다시 맞출 것.
+Camera.fps: 10.0
+
+Camera.RGB: 0
+
+# 카메라-IMU 외부 캘리브레이션을 아직 하지 않았다(docs/ros2-topic-contract.md: "이번 MVP 범위
+# 밖"). 단위행렬로 두 프레임이 같은 위치/방향이라고 가정하는 근사치다 - 실제로는 카메라와 IMU가
+# 폰 안에서 몇 mm~cm 떨어져 있고 축도 완벽히 안 맞을 수 있어 트래킹/스케일 정확도에 영향을 줄 수
+# 있다. 정확한 값이 필요해지면 Kalibr 등으로 별도 외부 캘리브레이션을 해서 갱신할 것.
+Tbc: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: f
+   data: [1.0, 0.0, 0.0, 0.0,
+          0.0, 1.0, 0.0, 0.0,
+          0.0, 0.0, 1.0, 0.0,
+          0.0, 0.0, 0.0, 1.0]
+
+# iPhone IMU 노이즈 파라미터를 직접 측정하지 않았다 - EuRoC.yaml(MEMS IMU 일반적인 값)을 그대로
+# 가져온 근사치다. 부정확하면 IMU 초기화(VIBA)가 느리거나 스케일 추정이 부정확해질 수 있다.
+IMU.NoiseGyro: 1.7e-4
+IMU.NoiseAcc: 2.0000e-3
+IMU.GyroWalk: 1.9393e-05
+IMU.AccWalk: 3.0000e-03
+# #4에서 실측된 iPhone Xs Max IMU 속도는 목표 200Hz의 절반인 ~99Hz였고(iOS CMMotionManager
+# 하드웨어 한계로 추정), #6/#10에서 관찰한 라이브 스트림은 프레임 전송과 대역폭을 공유하느라
+# 더 불균일하다(50~99Hz, 버스트). 200을 그대로 쓰면 ORB-SLAM3가 기대하는 샘플 간격과 실제
+# 간격이 어긋난다.
+IMU.Frequency: 100
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters - EuRoC.yaml과 동일한 시작값 (이번 라이브 검증 범위에서 튜닝하지 않음)
+#--------------------------------------------------------------------------------------------
+ORBextractor.nFeatures: 1000
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters - mono-inertial.cpp가 visualization=false로 고정이라 Pangolin은 안 쓰지만
+# System 생성자가 이 필드들을 파싱하므로 EuRoC.yaml 값 그대로 둔다.
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3
+Viewer.ViewpointX: 0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -3.5
+Viewer.ViewpointF: 500
