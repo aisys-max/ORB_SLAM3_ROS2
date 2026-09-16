@@ -42,6 +42,10 @@ MonocularInertialNode::~MonocularInertialNode()
 
 void MonocularInertialNode::GrabImu(const ImuMsg::SharedPtr msg)
 {
+    // TODO(#7 진단용, 나중에 제거)
+    static int dbgImuCount = 0;
+    if (++dbgImuCount % 50 == 1)
+        std::cout << "[DEBUG] GrabImu 호출 #" << dbgImuCount << std::endl;
     bufMutexImu_.lock();
     imuBuf_.push(msg);
     bufMutexImu_.unlock();
@@ -49,6 +53,10 @@ void MonocularInertialNode::GrabImu(const ImuMsg::SharedPtr msg)
 
 void MonocularInertialNode::GrabImage(const ImageMsg::SharedPtr msg)
 {
+    // TODO(#7 진단용, 나중에 제거)
+    static int dbgImgCount = 0;
+    if (++dbgImgCount % 10 == 1)
+        std::cout << "[DEBUG] GrabImage 호출 #" << dbgImgCount << std::endl;
     bufMutexImg_.lock();
     if (!imgBuf_.empty())
         imgBuf_.pop();
@@ -82,6 +90,15 @@ cv::Mat MonocularInertialNode::GetImage(const ImageMsg::SharedPtr msg)
 
 void MonocularInertialNode::SyncWithImu()
 {
+    // 처리할 게 없을 때(버퍼가 비었거나 IMU가 아직 이미지 시각을 못 따라잡았을 때)마다 매번 아래
+    // sleep_for로 양보한다 - 원래 이 경로들엔 sleep이 전혀 없어서 스레드가 CPU 한 코어를 100%
+    // 계속 태우는 busy-wait이었다. TX2는 코어가 4개뿐이라, 이 busy-wait이 실제 메시지를
+    // 콜백으로 전달하는 rclcpp executor 스레드와 CPU를 놓고 경쟁해 라이브 캡처(#7)에서
+    // 이미지/IMU 콜백 자체가 지연되고 트래킹이 아예 시작을 못 하는 원인이 됐다 (5분 넘게 100%
+    // CPU를 쓰면서도 로그에 진전이 전혀 없었음 - EuRoC bag 재생(#3)은 느슨한 재생 속도라 이
+    // 버그가 있어도 안 드러났을 뿐이다).
+    const auto kIdleSleep = std::chrono::milliseconds(1);
+
     while (!stopSync_)
     {
         cv::Mat im;
@@ -98,7 +115,10 @@ void MonocularInertialNode::SyncWithImu()
             bool imuReady = !imuBuf_.empty() && tIm <= Utility::StampToSec(imuBuf_.back()->header.stamp);
             bufMutexImu_.unlock();
             if (!imuReady)
+            {
+                std::this_thread::sleep_for(kIdleSleep);
                 continue;
+            }
 
             bufMutexImg_.lock();
             ImageMsg::SharedPtr imgMsg = imgBuf_.front();
@@ -119,6 +139,16 @@ void MonocularInertialNode::SyncWithImu()
             bufMutexImu_.unlock();
 
             Sophus::SE3f Tcw = SLAM_->TrackMonocular(im, tIm, vImuMeas);
+
+            // TODO(#7 진단용, 나중에 제거): 실제로 프레임이 여기까지 도달하는지, 트래킹 상태가
+            // 뭔지 확인하기 위한 임시 로그.
+            static int dbgCount = 0;
+            if (++dbgCount % 20 == 1)
+            {
+                std::cout << "[DEBUG] TrackMonocular 호출 #" << dbgCount
+                          << " imuMeas=" << vImuMeas.size()
+                          << " state=" << SLAM_->GetTrackingState() << std::endl;
+            }
 
             // 2 == Tracking::OK (Tracking.h) - 트래킹이 안 됐거나(초기화 전/유실) 아직 신뢰할 수
             // 없는 포즈까지 궤적에 넣으면 RViz에 원점 근처로 튀는 지점이 섞인다.
@@ -149,6 +179,10 @@ void MonocularInertialNode::SyncWithImu()
 
             std::chrono::milliseconds tSleep(1);
             std::this_thread::sleep_for(tSleep);
+        }
+        else
+        {
+            std::this_thread::sleep_for(kIdleSleep);
         }
     }
 }
