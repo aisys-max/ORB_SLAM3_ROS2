@@ -18,6 +18,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(Sophus REQUIRED)
@@ -64,7 +66,7 @@ add_executable(mono-inertial
   src/monocular-inertial/mono-inertial.cpp
   src/monocular-inertial/monocular-inertial-slam-node.cpp
 )
-ament_target_dependencies(mono-inertial rclcpp sensor_msgs cv_bridge ORB_SLAM3 Pangolin)
+ament_target_dependencies(mono-inertial rclcpp sensor_msgs geometry_msgs nav_msgs cv_bridge ORB_SLAM3 Pangolin)
 
 install(TARGETS mono rgbd stereo stereo-inertial mono-inertial
   DESTINATION lib/${PROJECT_NAME})

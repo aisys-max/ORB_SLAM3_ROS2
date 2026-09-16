@@ -12,6 +12,12 @@ MonocularInertialNode::MonocularInertialNode(ORB_SLAM3::System *pSLAM) :
 {
     subImu_ = this->create_subscription<ImuMsg>("imu", 1000, std::bind(&MonocularInertialNode::GrabImu, this, _1));
     subImg_ = this->create_subscription<ImageMsg>("camera/image_raw", 100, std::bind(&MonocularInertialNode::GrabImage, this, _1));
+    // docs/ros2-topic-contract.md: /orb_slam3/trajectory, reliable QoS(10) - 유실되면 안 되는 결과물이라
+    // 센서 토픽(image_raw/imu)의 SensorDataQoS와 다르게 reliable을 쓴다.
+    pubPath_ = this->create_publisher<PathMsg>("orb_slam3/trajectory", rclcpp::QoS(10));
+    // "map"은 SLAM이 초기화 시 잡는 세계 좌표계다 - camera_link(카메라에 고정된, 계속 움직이는
+    // 프레임)로는 궤적처럼 시간에 걸친 고정 기준점이 필요한 걸 표현할 수 없다.
+    pathMsg_.header.frame_id = "map";
 
     syncThread_ = new std::thread(&MonocularInertialNode::SyncWithImu, this);
 }
@@ -89,7 +95,8 @@ void MonocularInertialNode::SyncWithImu()
                 continue;
 
             bufMutexImg_.lock();
-            im = GetImage(imgBuf_.front());
+            ImageMsg::SharedPtr imgMsg = imgBuf_.front();
+            im = GetImage(imgMsg);
             imgBuf_.pop();
             bufMutexImg_.unlock();
 
@@ -105,7 +112,34 @@ void MonocularInertialNode::SyncWithImu()
             }
             bufMutexImu_.unlock();
 
-            SLAM_->TrackMonocular(im, tIm, vImuMeas);
+            Sophus::SE3f Tcw = SLAM_->TrackMonocular(im, tIm, vImuMeas);
+
+            // 2 == Tracking::OK (Tracking.h) - 트래킹이 안 됐거나(초기화 전/유실) 아직 신뢰할 수
+            // 없는 포즈까지 궤적에 넣으면 RViz에 원점 근처로 튀는 지점이 섞인다.
+            // 참고: 맵이 리셋되면(트래킹 재유실 후 재초기화) 이전 포즈들과 좌표계가 달라지는데
+            // 이 궤적은 그걸 구분하지 않는다 - 라이브 정성 확인(#7) 범위에서는 괜찮지만, 맵 리셋이
+            // 잦다면 RViz에서 궤적이 이어지지 않고 끊겨 보일 수 있다.
+            if (SLAM_->GetTrackingState() == 2)
+            {
+                Sophus::SE3f Twc = Tcw.inverse();
+                Eigen::Vector3f twc = Twc.translation();
+                Eigen::Quaternionf q = Twc.unit_quaternion();
+
+                geometry_msgs::msg::PoseStamped poseMsg;
+                poseMsg.header.stamp = imgMsg->header.stamp;
+                poseMsg.header.frame_id = "map";
+                poseMsg.pose.position.x = twc.x();
+                poseMsg.pose.position.y = twc.y();
+                poseMsg.pose.position.z = twc.z();
+                poseMsg.pose.orientation.x = q.x();
+                poseMsg.pose.orientation.y = q.y();
+                poseMsg.pose.orientation.z = q.z();
+                poseMsg.pose.orientation.w = q.w();
+
+                pathMsg_.header.stamp = poseMsg.header.stamp;
+                pathMsg_.poses.push_back(poseMsg);
+                pubPath_->publish(pathMsg_);
+            }
 
             std::chrono::milliseconds tSleep(1);
             std::this_thread::sleep_for(tSleep);
