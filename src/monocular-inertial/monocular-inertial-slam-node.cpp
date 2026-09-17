@@ -42,10 +42,6 @@ MonocularInertialNode::~MonocularInertialNode()
 
 void MonocularInertialNode::GrabImu(const ImuMsg::SharedPtr msg)
 {
-    // TODO(#7 진단용, 나중에 제거)
-    static int dbgImuCount = 0;
-    if (++dbgImuCount % 50 == 1)
-        std::cout << "[DEBUG] GrabImu 호출 #" << dbgImuCount << std::endl;
     bufMutexImu_.lock();
     imuBuf_.push(msg);
     bufMutexImu_.unlock();
@@ -53,10 +49,6 @@ void MonocularInertialNode::GrabImu(const ImuMsg::SharedPtr msg)
 
 void MonocularInertialNode::GrabImage(const ImageMsg::SharedPtr msg)
 {
-    // TODO(#7 진단용, 나중에 제거)
-    static int dbgImgCount = 0;
-    if (++dbgImgCount % 10 == 1)
-        std::cout << "[DEBUG] GrabImage 호출 #" << dbgImgCount << std::endl;
     bufMutexImg_.lock();
     if (!imgBuf_.empty())
         imgBuf_.pop();
@@ -139,16 +131,6 @@ void MonocularInertialNode::SyncWithImu()
             bufMutexImu_.unlock();
 
             Sophus::SE3f Tcw = SLAM_->TrackMonocular(im, tIm, vImuMeas);
-
-            // TODO(#7 진단용, 나중에 제거): 실제로 프레임이 여기까지 도달하는지, 트래킹 상태가
-            // 뭔지 확인하기 위한 임시 로그.
-            static int dbgCount = 0;
-            if (++dbgCount % 20 == 1)
-            {
-                std::cout << "[DEBUG] TrackMonocular 호출 #" << dbgCount
-                          << " imuMeas=" << vImuMeas.size()
-                          << " state=" << SLAM_->GetTrackingState() << std::endl;
-            }
 
             // 2 == Tracking::OK (Tracking.h) - 트래킹이 안 됐거나(초기화 전/유실) 아직 신뢰할 수
             // 없는 포즈까지 궤적에 넣으면 RViz에 원점 근처로 튀는 지점이 섞인다.
