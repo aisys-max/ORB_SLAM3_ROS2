@@ -132,12 +132,27 @@ void MonocularInertialNode::SyncWithImu()
 
             Sophus::SE3f Tcw = SLAM_->TrackMonocular(im, tIm, vImuMeas);
 
-            // 2 == Tracking::OK (Tracking.h) - 트래킹이 안 됐거나(초기화 전/유실) 아직 신뢰할 수
-            // 없는 포즈까지 궤적에 넣으면 RViz에 원점 근처로 튀는 지점이 섞인다.
-            // 참고: 맵이 리셋되면(트래킹 재유실 후 재초기화) 이전 포즈들과 좌표계가 달라지는데
-            // 이 궤적은 그걸 구분하지 않는다 - 라이브 정성 확인(#7) 범위에서는 괜찮지만, 맵 리셋이
-            // 잦다면 RViz에서 궤적이 이어지지 않고 끊겨 보일 수 있다.
-            if (SLAM_->GetTrackingState() == 2)
+            int trackingState = SLAM_->GetTrackingState();
+
+            // NOT_INITIALIZED(1) -> OK(2) 전이는 새 맵(Atlas가 만든 새 좌표계 원점)의 초기화가 막
+            // 끝난 시점이다 - 최초 초기화든 트래킹을 완전히 잃은 뒤 재초기화든 동일하게 여기서
+            // 잡힌다. 이 시점에 쌓아온 pathMsg_를 비우지 않으면, 새 원점 기준 포즈가 이전 원점
+            // 기준 포즈 뒤에 그대로 이어붙어 RViz Path가 서로 다른 좌표계의 점을 하나의 연속된
+            // 선으로 그린다 (#15 - "실제 움직임과 다른 모양으로 궤적이 그려짐"의 근본 원인).
+            // RECENTLY_LOST(3)에서 OK로 돌아오는 relocalization은 같은 맵/원점을 재사용하므로
+            // 여기 해당하지 않는다 - 끊지 않고 이어 그리는 게 맞다.
+            if (lastTrackingState_ == ORB_SLAM3::Tracking::NOT_INITIALIZED &&
+                trackingState == ORB_SLAM3::Tracking::OK)
+            {
+                RCLCPP_WARN(this->get_logger(),
+                    "Map (re)initialized - clearing published trajectory to avoid stitching poses from a different origin (#15)");
+                pathMsg_.poses.clear();
+            }
+            lastTrackingState_ = trackingState;
+
+            // OK(2) - 트래킹이 안 됐거나(초기화 전/유실) 아직 신뢰할 수 없는 포즈까지 궤적에
+            // 넣으면 RViz에 원점 근처로 튀는 지점이 섞인다.
+            if (trackingState == ORB_SLAM3::Tracking::OK)
             {
                 Sophus::SE3f Twc = Tcw.inverse();
                 Eigen::Vector3f twc = Twc.translation();

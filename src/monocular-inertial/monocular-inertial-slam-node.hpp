@@ -41,6 +41,10 @@ private:
     rclcpp::Subscription<ImageMsg>::SharedPtr subImg_;
     rclcpp::Publisher<PathMsg>::SharedPtr pubPath_;
     PathMsg pathMsg_;
+    // 직전 루프에서 관측한 트래킹 상태 - NOT_INITIALIZED(1) -> OK(2) 전이를 감지해 "새 맵(=새
+    // 좌표계 원점)이 막 초기화됨"을 판별하는 데 쓴다(#15). 초기값은 상태 전이가 아직 없었음을
+    // 뜻하는 SYSTEM_NOT_READY로 둔다.
+    int lastTrackingState_ = ORB_SLAM3::Tracking::SYSTEM_NOT_READY;
 
     ORB_SLAM3::System *SLAM_;
     std::thread *syncThread_;
