@@ -31,25 +31,34 @@ Camera.fps: 10.0
 
 Camera.RGB: 0
 
-# 카메라-IMU 외부 캘리브레이션을 아직 하지 않았다(docs/ros2-topic-contract.md: "이번 MVP 범위
-# 밖"). 단위행렬로 두 프레임이 같은 위치/방향이라고 가정하는 근사치다 - 실제로는 카메라와 IMU가
-# 폰 안에서 몇 mm~cm 떨어져 있고 축도 완벽히 안 맞을 수 있어 트래킹/스케일 정확도에 영향을 줄 수
-# 있다. 정확한 값이 필요해지면 Kalibr 등으로 별도 외부 캘리브레이션을 해서 갱신할 것.
+# 2026-09-19(#15) - Kalibr 없이, 정지 자세 3가지(카메라 아래/위/수평)에서 가속도계가 읽는
+# 중력 방향을 비교해 회전만 경험적으로 추정했다 (aisys-max/slam-tx2 저장소의
+# scripts/capture_imu_pose.py + scripts/estimate_tbc_rotation.py, 이슈 #15 코멘트에 원
+# 측정치 기록). pose_down/-pose_up 사이 각도 오차 0.67도로 측정 일관성은 확인됨. 결과가 거의
+# 정확히 축 치환 행렬(오차 1~2도)로 나온 게, 후면 카메라가 전면(Z)과 반대를 보고 iOS 앱의
+# videoOrientation=.landscapeRight 설정으로 이미지 X/Y가 기기 축과 90도 어긋난다는 사실과
+# 들어맞아 정성적으로도 타당하다 - 단위행렬(회전 없음 가정)보다 훨씬 근접한 근사치다. 평행이동은
+# 카메라-IMU가 폰 안에서 몇 mm 떨어진 정도라 0으로 근사한다 - 회전 오차에 비해 영향이 작고,
+# 정확한 값을 재려면 결국 Kalibr 등 외부 도구가 필요해 이번엔 하지 않았다.
 Tbc: !!opencv-matrix
    rows: 4
    cols: 4
    dt: f
-   data: [1.0, 0.0, 0.0, 0.0,
-          0.0, 1.0, 0.0, 0.0,
-          0.0, 0.0, 1.0, 0.0,
-          0.0, 0.0, 0.0, 1.0]
+   data: [-0.009453, -0.999837, -0.015389, 0.0,
+          -0.999955,  0.009459, -0.000272, 0.0,
+           0.000418,  0.015385, -0.999882, 0.0,
+           0.0,       0.0,       0.0,      1.0]
 
-# iPhone IMU 노이즈 파라미터를 직접 측정하지 않았다 - EuRoC.yaml(MEMS IMU 일반적인 값)을 그대로
-# 가져온 근사치다. 부정확하면 IMU 초기화(VIBA)가 느리거나 스케일 추정이 부정확해질 수 있다.
-IMU.NoiseGyro: 1.7e-4
-IMU.NoiseAcc: 2.0000e-3
-IMU.GyroWalk: 1.9393e-05
-IMU.AccWalk: 3.0000e-03
+# 2026-09-19(#15) - 정지 상태로 2시간 기록한 /imu(scripts/compute_allan_variance.py, 이슈 #15
+# 코멘트에 원 측정치 기록)의 overlapping Allan variance로 실측. 이전에는 EuRoC.yaml(다른 MEMS
+# IMU) 기본값을 그대로 썼는데, 특히 AccWalk가 실측보다 33배, GyroWalk가 5.6배, NoiseAcc가 4배
+# 높게(더 나쁜 센서로) 가정돼 있었다 - ORB-SLAM3의 IMU 초기화(VIBA)가 실제보다 훨씬 신뢰도
+# 낮은 센서로 가정하고 과도하게 보수적으로 동작했을 가능성이 있다(잦은 리셋의 원인 후보).
+# NoiseGyro만 기존값과 비슷했다.
+IMU.NoiseGyro: 1.557181e-04
+IMU.NoiseAcc: 4.956979e-04
+IMU.GyroWalk: 3.435025e-06
+IMU.AccWalk: 9.038592e-05
 # #4에서 실측된 iPhone Xs Max IMU 속도는 목표 200Hz의 절반인 ~99Hz였고(iOS CMMotionManager
 # 하드웨어 한계로 추정), #6/#10에서 관찰한 라이브 스트림은 프레임 전송과 대역폭을 공유하느라
 # 더 불균일하다(50~99Hz, 버스트). 200을 그대로 쓰면 ORB-SLAM3가 기대하는 샘플 간격과 실제
