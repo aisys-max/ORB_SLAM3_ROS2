@@ -14,10 +14,34 @@ MonocularInertialNode::MonocularInertialNode(ORB_SLAM3::System *pSLAM) :
     // docs/ros2-topic-contract.md대로 SensorDataQoS(best-effort)로 publish하는데, reliable 구독자는
     // best-effort 발행자와 아예 매칭이 안 된다 (DDS QoS 호환성 규칙). 그래서 라이브 캡처에서 이
     // 노드가 이미지를 하나도 못 받았다 - #3 EuRoC 검증 때는 ros2 bag play가 QoS 미지정 토픽을
-    // reliable로 재생해 우연히 맞아떨어져 이 버그가 안 드러났다. best_effort()로 맞추고, depth는
-    // 기존 값(IMU 1000, 이미지 100) 그대로 유지한다.
-    subImu_ = this->create_subscription<ImuMsg>("imu", rclcpp::QoS(1000).best_effort(), std::bind(&MonocularInertialNode::GrabImu, this, _1));
-    subImg_ = this->create_subscription<ImageMsg>("camera/image_raw", rclcpp::QoS(100).best_effort(), std::bind(&MonocularInertialNode::GrabImage, this, _1));
+    // reliable로 재생해 우연히 맞아떨어져 이 버그가 안 드러났다. best_effort()가 라이브 기본값이고,
+    // depth는 기존 값(IMU 1000, 이미지 100) 그대로 유지한다.
+    //
+    // (slam-tx2#20) best-effort는 얕은 큐와 맞물려 재생 타이밍에 따라 매번 다른 메시지를
+    // 조용히 드랍한다 - 확인 결과 같은 bag을 재생해도 실제 도착하는 프레임/IMU 개수가 재생마다
+    // 달랐다(예: 이미지 1184개 중 1182~1183개, IMU 16525개 중 16007~16062개). 이러면 bag 기반
+    // 회귀 테스트가 매번 다른 입력을 넣는 셈이라 비교가 무의미해진다. `reliable_sensor_qos`
+    // 파라미터(기본 false, 라이브 캡처는 그대로 best-effort)를 true로 주면 reliable + 넉넉한
+    // depth로 구독해 재생 테스트에서 유실 없는 결정적 입력을 보장한다(같은 bag을 2번 재생해
+    // 이미지 1184/1184, IMU 16522/16522로 완전히 동일하게 도착함을 확인).
+    //   ros2 run orbslam3 mono-inertial <vocab> <settings> --ros-args -p reliable_sensor_qos:=true
+    bool reliableSensorQos = this->declare_parameter<bool>("reliable_sensor_qos", false);
+    rclcpp::QoS imuQos(1000);
+    rclcpp::QoS imgQos(100);
+    if (reliableSensorQos)
+    {
+        imuQos = rclcpp::QoS(5000).reliable();
+        imgQos = rclcpp::QoS(200).reliable();
+        RCLCPP_WARN(this->get_logger(), "reliable_sensor_qos=true: 센서 구독을 reliable로 전환함 - "
+                    "bag 재생 기반 결정적 테스트 전용, 라이브 캡처(best-effort 발행)에는 쓰지 말 것");
+    }
+    else
+    {
+        imuQos = imuQos.best_effort();
+        imgQos = imgQos.best_effort();
+    }
+    subImu_ = this->create_subscription<ImuMsg>("imu", imuQos, std::bind(&MonocularInertialNode::GrabImu, this, _1));
+    subImg_ = this->create_subscription<ImageMsg>("camera/image_raw", imgQos, std::bind(&MonocularInertialNode::GrabImage, this, _1));
     // docs/ros2-topic-contract.md: /orb_slam3/trajectory, reliable QoS(10) - 유실되면 안 되는 결과물이라
     // 센서 토픽(image_raw/imu)의 SensorDataQoS와 다르게 reliable을 쓴다.
     pubPath_ = this->create_publisher<PathMsg>("orb_slam3/trajectory", rclcpp::QoS(10));
