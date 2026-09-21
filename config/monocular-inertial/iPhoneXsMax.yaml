@@ -23,11 +23,12 @@ Camera.p2: 0.0014160696907278868
 Camera.width: 640
 Camera.height: 480
 
-# 실측 목표는 20~30fps(docs/ros2-topic-contract.md)이지만, USB/iproxy 대역폭 한계로 실측
-# ~5.9Hz까지 떨어지는 게 확인됐다(aisys-max/slam-tx2#10). 이 값은 ORB-SLAM3 내부 타이밍
-# 휴리스틱(속도 추정 윈도우 등)에 쓰이므로 목표치보다 실측치에 가깝게 낮춰 잡는다 - 라이브
-# 테스트에서 트래킹이 잘 안 되면 이 값을 실제 관찰된 Hz로 다시 맞출 것.
-Camera.fps: 10.0
+# 2026-09-20(#10) - 브리지 노드 CPU 병목(array.array 미사용으로 인한 Image.data setter
+# 과부하)을 고친 뒤 실측 ~24~27Hz로 목표치(20~30fps, docs/ros2-topic-contract.md)에 도달했다.
+# 예전엔 그 버그 때문에 실측 ~5.9Hz에 맞춰 10.0으로 낮춰뒀었는데, 이 값은 ORB-SLAM3 내부 타이밍
+# 휴리스틱(등속 모델 기반 특징점 탐색 반경, 키프레임 삽입 판단 등)에 쓰여서 실제 프레임 간격과
+# 2~3배 어긋나 있으면 트래킹 품질에 영향을 줄 수 있다 - 실측치로 다시 맞춘다.
+Camera.fps: 25.0
 
 Camera.RGB: 0
 
@@ -66,12 +67,20 @@ IMU.AccWalk: 9.038592e-05
 IMU.Frequency: 100
 
 #--------------------------------------------------------------------------------------------
-# ORB Parameters - EuRoC.yaml과 동일한 시작값 (이번 라이브 검증 범위에서 튜닝하지 않음)
+# ORB Parameters
 #--------------------------------------------------------------------------------------------
-ORBextractor.nFeatures: 1000
+# 2026-09-20(#10) - EuRoC.yaml 시작값(1000)에서 1500으로 올렸다. 라이브 재검증 중
+# "TRACK_REF_KF: Less than 15 matches!!"로 트래킹이 끊기는 게 관찰됐는데, 이러면 IMU 초기화가
+# 완료되기 전에(10 키프레임/2초 문턱 전에) 맵이 리셋돼버린다. MAXN 전환(#10) 이후 TX2에
+# CPU 여유가 생겨 더 많은 특징점을 뽑아도 실시간성에 영향이 적다고 보고 늘렸다.
+ORBextractor.nFeatures: 1500
 ORBextractor.scaleFactor: 1.2
 ORBextractor.nLevels: 8
-ORBextractor.iniThFAST: 20
+# 2026-09-20(#10) - 라이브 재검증에서 맵 포인트가 상한(1500)보다 훨씬 적게(80~300개) 잡히고
+# "Less than 15 matches"도 관찰됐다 - 실내 조명 + 30fps 고정 노출로 이미지가 어두워 FAST
+# 코너가 기본 임계값(20)에서 잘 안 잡힐 가능성. EuRoC 시작값보다 낮춰 저조도에서 특징점을
+# 더 확보한다 (minThFAST는 iniThFAST 실패 시 재시도하는 완화값 - 기존 7 유지).
+ORBextractor.iniThFAST: 12
 ORBextractor.minThFAST: 7
 
 #--------------------------------------------------------------------------------------------
